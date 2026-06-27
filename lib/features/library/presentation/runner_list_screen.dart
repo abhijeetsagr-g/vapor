@@ -1,26 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
 
 import '../services/runner_discovery_service.dart';
+import 'cubit/runner_list/runner_list_cubit.dart';
+import 'cubit/runner_list/runner_list_state.dart';
 
-class RunnerListScreen extends StatefulWidget {
+class RunnerListScreen extends StatelessWidget {
   const RunnerListScreen({super.key});
 
   @override
-  State<RunnerListScreen> createState() => _RunnerListScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (_) => GetIt.instance<RunnerListCubit>()..refresh(),
+      child: const _RunnerListView(),
+    );
+  }
 }
 
-class _RunnerListScreenState extends State<RunnerListScreen> {
-  List<RunnerInfo> _runners = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _refresh();
-  }
-
-  void _refresh() {
-    setState(() => _runners = RunnerDiscoveryService.discover());
-  }
+class _RunnerListView extends StatelessWidget {
+  const _RunnerListView();
 
   @override
   Widget build(BuildContext context) {
@@ -30,31 +29,51 @@ class _RunnerListScreenState extends State<RunnerListScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _refresh,
+            onPressed: () => context.read<RunnerListCubit>().refresh(),
           ),
         ],
       ),
-      body: _runners.isEmpty
-          ? const Center(child: Text('No runners found'))
-          : ListView.builder(
-              itemCount: _runners.length,
-              itemBuilder: (context, index) {
-                final runner = _runners[index];
-                return ListTile(
-                  leading: Icon(
-                    runner.source == RunnerSource.system
-                        ? Icons.computer
-                        : Icons.folder,
+      body: BlocBuilder<RunnerListCubit, RunnerListState>(
+        builder: (context, state) {
+          if (state.runners.isEmpty) {
+            return const Center(child: Text('No runners found'));
+          }
+          return ListView.builder(
+            itemCount: state.runners.length,
+            itemBuilder: (_, i) {
+              final r = state.runners[i];
+              return ListTile(
+                leading: Icon(
+                  r.source == RunnerSource.system
+                      ? Icons.computer
+                      : Icons.folder,
+                ),
+                title: Text(r.name),
+                subtitle: Text(r.path),
+                trailing: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
                   ),
-                  title: Text(runner.name),
-                  subtitle: Text(runner.path),
-                  trailing: Text(
-                    runner.isProton ? 'Proton' : 'Wine',
-                    style: Theme.of(context).textTheme.labelSmall,
+                  decoration: BoxDecoration(
+                    color: r.isProton
+                        ? Colors.blue.withValues(alpha: 0.15)
+                        : Colors.green.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                );
-              },
-            ),
+                  child: Text(
+                    r.isProton ? 'Proton' : 'Wine',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: r.isProton ? Colors.blue : Colors.green,
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }

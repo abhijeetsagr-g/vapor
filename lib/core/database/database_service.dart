@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:vapor/core/app_paths.dart';
+import 'package:vapor/features/library/models/achievement.dart';
 import 'package:vapor/features/library/models/game_metadata.dart';
 import 'package:vapor/features/library/models/game_model.dart';
 
@@ -25,11 +25,10 @@ class DatabaseService {
 
   Future<Database> _init() async {
     sqfliteFfiInit();
-    final dir = await getApplicationSupportDirectory();
-    final path = p.join(dir.path, 'vapor.db');
+    await AppPaths.ensureDirs();
     return openDatabase(
-      path,
-      version: 4,
+      AppPaths.dbPath,
+      version: 5,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE games (
@@ -57,6 +56,9 @@ class DatabaseService {
         }
         if (old < 4) {
           await _migrateMetadataV4(db);
+        }
+        if (old < 5) {
+          await _migrateMetadataV5(db);
         }
       },
     );
@@ -127,6 +129,7 @@ class DatabaseService {
         iconUrl TEXT,
         screenshots TEXT NOT NULL DEFAULT '[]',
         movieUrl TEXT,
+        achievements TEXT NOT NULL DEFAULT '[]',
         FOREIGN KEY (gameId) REFERENCES games(id) ON DELETE CASCADE
       )
     ''');
@@ -141,6 +144,12 @@ class DatabaseService {
       'ALTER TABLE game_metadata ADD COLUMN screenshots TEXT NOT NULL DEFAULT "[]"',
     );
     await db.execute('ALTER TABLE game_metadata ADD COLUMN movieUrl TEXT');
+  }
+
+  Future<void> _migrateMetadataV5(Database db) async {
+    await db.execute(
+      'ALTER TABLE game_metadata ADD COLUMN achievements TEXT NOT NULL DEFAULT "[]"',
+    );
   }
 
   Future<void> upsertMetadata(GameMetadata meta) async {
@@ -186,6 +195,7 @@ class DatabaseService {
         'iconUrl': meta.iconUrl,
         'screenshots': jsonEncode(meta.screenshots),
         'movieUrl': meta.movieUrl,
+        'achievements': jsonEncode(meta.achievements.map((a) => a.toJson()).toList()),
       };
 
   GameMetadata _metaFromMap(Map<String, dynamic> map) => GameMetadata(
@@ -211,6 +221,9 @@ class DatabaseService {
             (jsonDecode(map['screenshots'] as String) as List<dynamic>)
                 .cast<String>(),
         movieUrl: map['movieUrl'] as String?,
+        achievements: (jsonDecode(map['achievements'] as String) as List<dynamic>)
+            .map((a) => Achievement.fromJson(a as Map<String, dynamic>))
+            .toList(),
       );
 
   Map<String, dynamic> _toMap(GameModel game) => {

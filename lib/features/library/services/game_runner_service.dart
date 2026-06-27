@@ -4,23 +4,22 @@ import 'dart:io';
 import '../models/game_model.dart';
 import 'runner_discovery_service.dart';
 
-class GameLog {
-  static final List<String> _entries = [];
-
-  static List<String> get entries => List.unmodifiable(_entries);
-
-  static void write(String msg) {
-    _entries.add('[${DateTime.now()}] $msg');
-  }
-}
-
 class GameRunnerService {
-  static Future<Process> launch(GameModel game) async {
-    GameLog.write('Launching ${game.name} (${game.service})');
+  final RunnerDiscoveryService _runnerDiscovery;
+  final void Function(String) _log;
+
+  GameRunnerService({
+    required RunnerDiscoveryService runnerDiscovery,
+    required void Function(String) log,
+  })  : _runnerDiscovery = runnerDiscovery,
+        _log = log;
+
+  Future<Process> launch(GameModel game) async {
+    _log('Launching ${game.name} (${game.service})');
 
     switch (game.service) {
       case Service.lutris:
-        GameLog.write('Command: lutris lutris:rungame/${game.slug}');
+        _log('Command: lutris lutris:rungame/${game.slug}');
         return _capture('lutris', ['lutris:rungame/${game.slug}']);
       case Service.manual:
         return _launchManual(game);
@@ -29,18 +28,18 @@ class GameRunnerService {
     }
   }
 
-  static Future<Process> _launchManual(GameModel game) async {
+  Future<Process> _launchManual(GameModel game) async {
     final hasRunner = game.runnerPath.isNotEmpty &&
         game.runnerPath != '/usr/bin';
 
     if (hasRunner) {
       final isProton = game.runnerPath.endsWith('/proton');
 
-      if (isProton && RunnerDiscoveryService.isUmuAvailable()) {
+      if (isProton && _runnerDiscovery.isUmuAvailable()) {
         final protonDir = File(game.runnerPath).parent.path;
-        GameLog.write('Command: umu-run ${game.execPath}');
-        GameLog.write('WINEPREFIX=${game.configPath}');
-        GameLog.write('PROTONPATH=$protonDir');
+        _log('Command: umu-run ${game.execPath}');
+        _log('WINEPREFIX=${game.configPath}');
+        _log('PROTONPATH=$protonDir');
         return _capture(
           'umu-run',
           [game.execPath],
@@ -52,7 +51,7 @@ class GameRunnerService {
       }
 
       if (isProton) {
-        GameLog.write('ERROR: Proton runner requires UMU-Launcher. '
+        _log('ERROR: Proton runner requires UMU-Launcher. '
             'Install it or use a Wine runner.');
         throw ProcessException(
           'umu-run',
@@ -62,8 +61,8 @@ class GameRunnerService {
         );
       }
 
-      GameLog.write('Command: ${game.runnerPath} ${game.execPath}');
-      GameLog.write('WINEPREFIX=${game.configPath}');
+      _log('Command: ${game.runnerPath} ${game.execPath}');
+      _log('WINEPREFIX=${game.configPath}');
       return _capture(
         game.runnerPath,
         [game.execPath],
@@ -73,11 +72,11 @@ class GameRunnerService {
       );
     }
 
-    GameLog.write('Command: ${game.execPath}');
+    _log('Command: ${game.execPath}');
     return _capture(game.execPath, [], runInShell: true);
   }
 
-  static Future<Process> _capture(
+  Future<Process> _capture(
     String executable,
     List<String> args, {
     Map<String, String>? environment,
@@ -91,10 +90,10 @@ class GameRunnerService {
     );
 
     process.stderr.transform(utf8.decoder).listen((data) {
-      GameLog.write('[stderr] $data');
+      _log('[stderr] $data');
     });
     process.stdout.transform(utf8.decoder).listen((data) {
-      GameLog.write('[stdout] $data');
+      _log('[stdout] $data');
     });
 
     return process;

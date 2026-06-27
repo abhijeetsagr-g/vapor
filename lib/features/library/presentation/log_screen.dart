@@ -1,42 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../services/game_runner_service.dart';
+import 'cubit/game_log/game_log_cubit.dart';
+import 'cubit/game_log/game_log_state.dart';
 
-class LogScreen extends StatefulWidget {
+class LogScreen extends StatelessWidget {
   const LogScreen({super.key});
 
   @override
-  State<LogScreen> createState() => _LogScreenState();
-}
-
-class _LogScreenState extends State<LogScreen> {
-  @override
   Widget build(BuildContext context) {
-    final entries = GameLog.entries;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Log'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => setState(() {}),
-          ),
-        ],
-      ),
-      body: entries.isEmpty
-          ? const Center(child: Text('No log entries'))
-          : ListView.builder(
-              itemCount: entries.length,
-              itemBuilder: (context, index) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                  child: Text(
-                    entries[index],
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                  ),
-                );
-              },
+      appBar: AppBar(title: const Text('Log')),
+      body: BlocBuilder<GameLogCubit, GameLogState>(
+        builder: (context, state) {
+          if (state.entries.isEmpty) {
+            return const Center(child: Text('No log entries'));
+          }
+          return ListView.builder(
+            itemCount: state.entries.length,
+            itemBuilder: (_, i) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              child: Text(
+                state.entries[i],
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+              ),
             ),
+          );
+        },
+      ),
     );
   }
 }

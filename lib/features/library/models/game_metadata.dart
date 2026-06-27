@@ -1,3 +1,5 @@
+import 'achievement.dart';
+
 class GameMetadata {
   final int? id;
   final int? gameId;
@@ -17,6 +19,7 @@ class GameMetadata {
   final String? iconUrl;
   final List<String> screenshots;
   final String? movieUrl;
+  final List<Achievement> achievements;
 
   GameMetadata({
     this.id,
@@ -37,6 +40,7 @@ class GameMetadata {
     this.iconUrl,
     this.screenshots = const [],
     this.movieUrl,
+    this.achievements = const [],
   });
 
   GameMetadata copyWith({
@@ -58,6 +62,7 @@ class GameMetadata {
     String? iconUrl,
     List<String>? screenshots,
     String? movieUrl,
+    List<Achievement>? achievements,
   }) =>
       GameMetadata(
         id: id ?? this.id,
@@ -78,5 +83,6 @@ class GameMetadata {
         iconUrl: iconUrl ?? this.iconUrl,
         screenshots: screenshots ?? this.screenshots,
         movieUrl: movieUrl ?? this.movieUrl,
+        achievements: achievements ?? this.achievements,
       );
 }

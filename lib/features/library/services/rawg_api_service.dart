@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:vapor/features/library/models/achievement.dart';
 
 const _kDefaultBase = 'https://api.rawg.io/api';
 
@@ -167,5 +168,19 @@ class RawgApiService {
     return (data['max'] as String?) ??
         (data['480'] as String?) ??
         (data.values.firstOrNull as String?);
+  }
+
+  Future<List<Achievement>> getAchievements(int rawgId) async {
+    final uri = Uri.parse('$baseUrl/games/$rawgId/achievements')
+        .replace(queryParameters: {'key': apiKey});
+
+    final response = await http.get(uri);
+    if (response.statusCode != 200) return [];
+
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final results = body['results'] as List<dynamic>;
+    return results
+        .map((r) => Achievement.fromJson(r as Map<String, dynamic>))
+        .toList();
   }
 }

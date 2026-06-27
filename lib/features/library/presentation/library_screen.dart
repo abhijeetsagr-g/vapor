@@ -1,272 +1,220 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../core/database/database_service.dart';
-import '../models/game_metadata.dart';
+import '../../../core/widgets/cached_game_image.dart';
 import '../models/game_model.dart';
-import '../services/game_runner_service.dart';
-import '../services/lutris_import_service.dart';
-import '../services/metadata_service.dart';
 import 'add_game_screen.dart';
+import 'cubit/game_launch/game_launch_cubit.dart';
+import 'cubit/game_launch/game_launch_state.dart';
+import 'cubit/library/library_cubit.dart';
+import 'cubit/library/library_state.dart';
 import 'game_detail_screen.dart';
 import 'log_screen.dart';
 import 'runner_list_screen.dart';
 
-class LibraryScreen extends StatefulWidget {
+class LibraryScreen extends StatelessWidget {
   const LibraryScreen({super.key});
 
   @override
-  State<LibraryScreen> createState() => _LibraryScreenState();
-}
-
-class _LibraryScreenState extends State<LibraryScreen> {
-  List<GameModel> _games = [];
-  List<GameModel> _filtered = [];
-  Map<int, GameMetadata> _metaMap = {};
-  bool _loading = true;
-  int? _playingId;
-  bool _fetching = false;
-  int _fetchDone = 0;
-  int _fetchTotal = 0;
-  final _searchController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _launch(GameModel game) async {
-    if (_playingId != null) return;
-    setState(() => _playingId = game.id);
-    final stopwatch = Stopwatch()..start();
-    try {
-      final process = await GameRunnerService.launch(game);
-      await process.exitCode;
-    } on ProcessException {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to launch ${game.name}')),
-      );
-    } finally {
-      stopwatch.stop();
-      setState(() => _playingId = null);
-      await DatabaseService.instance.updateGame(
-        game.copyWith(
-          playtime: game.playtime + stopwatch.elapsed,
-          lastPlayed: DateTime.now(),
-        ),
-      );
-      _load();
-    }
-  }
-
-  Future<void> _importFromLutris() async {
-    final result = await LutrisImportService.import();
-    if (!mounted) return;
-
-    if (result.error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.error!)),
-      );
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${result.imported} new, ${result.updated} updated'),
-      ),
-    );
-    await _load();
-  }
-
-  Future<void> _fetchAllMetadata() async {
-    final games = _games.where((g) => g.id != null).toList();
-    setState(() {
-      _fetching = true;
-      _fetchDone = 0;
-      _fetchTotal = games.length;
-    });
-    for (final game in games) {
-      if (!mounted) return;
-      try {
-        await MetadataService.fetchAndCache(game.id!, game.name);
-      } catch (_) {
-        // best-effort per game
-      }
-      setState(() => _fetchDone++);
-    }
-    setState(() => _fetching = false);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Metadata fetched for $_fetchDone/$_fetchTotal games')),
-    );
-  }
-
-  Future<void> _load() async {
-    final games = await DatabaseService.instance.getAllGames();
-    final metaMap = <int, GameMetadata>{};
-    for (final g in games) {
-      if (g.id == null) continue;
-      final m = await DatabaseService.instance.getMetadataByGameId(g.id!);
-      if (m != null) metaMap[g.id!] = m;
-    }
-    setState(() {
-      _games = games;
-      _metaMap = metaMap;
-      _loading = false;
-    });
-    _filter();
-  }
-
-  void _filter() {
-    final query = _searchController.text.toLowerCase();
-    setState(() {
-      _filtered = _games.where((g) => g.name.toLowerCase().contains(query)).toList();
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Library'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.auto_awesome),
-            tooltip: 'Fetch metadata for all games',
-            onPressed: _fetching ? null : _fetchAllMetadata,
-          ),
-          IconButton(
-            icon: const Icon(Icons.file_download_outlined),
-            tooltip: 'Import from Lutris',
-            onPressed: _importFromLutris,
-          ),
-          IconButton(
-            icon: const Icon(Icons.desktop_windows_outlined),
-            tooltip: 'Available runners',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const RunnerListScreen()),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.terminal_outlined),
-            tooltip: 'Log',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const LogScreen()),
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        child: const Icon(Icons.add),
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const AddGameScreen()),
-        ).then((_) => _load()),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: const InputDecoration(
-                      hintText: 'Search games...',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) => _filter(),
+    return BlocListener<GameLaunchCubit, GameLaunchState>(
+      listenWhen: (prev, next) => next.lastError != null,
+      listener: (ctx, state) {
+        if (state.lastError != null) {
+          ScaffoldMessenger.of(ctx).showSnackBar(
+            SnackBar(content: Text(state.lastError!)),
+          );
+          ctx.read<GameLaunchCubit>().clearError();
+        }
+      },
+      child: BlocConsumer<LibraryCubit, LibraryState>(
+        listenWhen: (prev, next) =>
+            next.snackbarMessage != prev.snackbarMessage &&
+            next.snackbarMessage != null,
+        listener: (ctx, state) {
+          if (state.snackbarMessage != null) {
+            ScaffoldMessenger.of(ctx).showSnackBar(
+              SnackBar(content: Text(state.snackbarMessage!)),
+            );
+            ctx.read<LibraryCubit>().clearSnackbar();
+          }
+        },
+        builder: (ctx, state) {
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('Library'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.auto_awesome),
+                  tooltip: 'Fetch metadata for all games',
+                  onPressed: state.status == LibraryStatus.loaded && !state.isImporting
+                      ? () => ctx.read<LibraryCubit>().fetchAllMetadata()
+                      : null,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.file_download_outlined),
+                  tooltip: 'Import from Lutris',
+                  onPressed: state.isImporting
+                      ? null
+                      : () => ctx.read<LibraryCubit>().importFromLutris(),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.desktop_windows_outlined),
+                  tooltip: 'Available runners',
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const RunnerListScreen()),
                   ),
                 ),
-                if (_fetching) Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: Column(
-                    children: [
-                      LinearProgressIndicator(value: _fetchTotal > 0 ? _fetchDone / _fetchTotal : null),
-                      const SizedBox(height: 4),
-                      Text('$_fetchDone / $_fetchTotal', style: Theme.of(context).textTheme.bodySmall),
-                    ],
+                IconButton(
+                  icon: const Icon(Icons.terminal_outlined),
+                  tooltip: 'Log',
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LogScreen()),
                   ),
-                ),
-                Expanded(
-                  child: _filtered.isEmpty
-                      ? const Center(child: Text('No games yet'))
-                      : ListView.builder(
-                          itemCount: _filtered.length,
-                          itemBuilder: (context, index) {
-                            final game = _filtered[index];
-                            return Dismissible(
-                              key: ValueKey(game.id),
-                              direction: DismissDirection.endToStart,
-                              background: Container(
-                                alignment: Alignment.centerRight,
-                                padding: const EdgeInsets.only(right: 20),
-                                color: Colors.red,
-                                child: const Icon(Icons.delete, color: Colors.white),
-                              ),
-                              confirmDismiss: (_) async {
-                                return await showDialog<bool>(
-                                  context: context,
-                                  builder: (ctx) => AlertDialog(
-                                    title: const Text('Remove game?'),
-                                    content: Text(
-                                        'Remove "${game.name}" from your library?'),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(ctx, false),
-                                        child: const Text('Cancel'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(ctx, true),
-                                        child: const Text('Remove'),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                              onDismissed: (_) async {
-                                await DatabaseService.instance
-                                    .deleteGame(game.id!);
-                                _load();
-                              },
-                              child: ListTile(
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => GameDetailScreen(gameId: game.id!),
-                                  ),
-                                ),
-                                leading: _gameLeading(game),
-                                title: Text(game.name),
-                                subtitle: Text(
-                                  '${game.runnerPath}  ·  ${_formatPlaytime(game.playtime)}',
-                                ),
-                                trailing: _playingId == game.id
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2),
-                                      )
-                                    : IconButton(
-                                        icon: const Icon(Icons.play_arrow),
-                                        onPressed: () => _launch(game),
-                                      ),
-                              ),
-                            );
-                          },
-                        ),
                 ),
               ],
             ),
+            floatingActionButton: FloatingActionButton(
+              child: const Icon(Icons.add),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AddGameScreen()),
+              ).then((_) => context.read<LibraryCubit>().load()),
+            ),
+            body: _buildBody(ctx, state),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context, LibraryState state) {
+    if (state.status == LibraryStatus.initial ||
+        state.status == LibraryStatus.loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (state.status == LibraryStatus.error) {
+      return Center(child: Text('Error: ${state.errorMessage}'));
+    }
+
+    return Column(
+      children: [
+        if (state.isImporting)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: LinearProgressIndicator(),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: TextField(
+            decoration: const InputDecoration(
+              hintText: 'Search games...',
+              prefixIcon: Icon(Icons.search),
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (q) => context.read<LibraryCubit>().search(q),
+          ),
+        ),
+        if (state.fetchProgress.inProgress)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Column(
+              children: [
+                LinearProgressIndicator(value: state.fetchProgress.ratio),
+                const SizedBox(height: 4),
+                Text(
+                  '${state.fetchProgress.done} / ${state.fetchProgress.total}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        Expanded(
+          child: state.filteredGames.isEmpty
+              ? const Center(child: Text('No games yet'))
+              : ListView.builder(
+                  itemCount: state.filteredGames.length,
+                  itemBuilder: (ctx, index) {
+                    final game = state.filteredGames[index];
+                    return _GameTile(game: game);
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _GameTile extends StatelessWidget {
+  final GameModel game;
+  const _GameTile({required this.game});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<GameLaunchCubit, GameLaunchState>(
+      builder: (ctx, launchState) {
+        final isPlaying = launchState.playingGameId == game.id;
+        return Dismissible(
+          key: ValueKey(game.id),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20),
+            color: Colors.red,
+            child: const Icon(Icons.delete, color: Colors.white),
+          ),
+          confirmDismiss: (_) async {
+            return await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Remove game?'),
+                content: Text('Remove "${game.name}" from your library?'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('Remove'),
+                  ),
+                ],
+              ),
+            );
+          },
+          onDismissed: (_) {
+            context.read<LibraryCubit>().deleteGame(game);
+          },
+          child: ListTile(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => GameDetailScreen(gameId: game.id!),
+              ),
+            ),
+            leading: _GameLeading(game: game),
+            title: Text(game.name),
+            subtitle: Text(
+              '${game.runnerPath}  ·  ${_formatPlaytime(game.playtime)}',
+            ),
+            trailing: isPlaying
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.play_arrow),
+                    onPressed: () =>
+                        context.read<LibraryCubit>().launch(game),
+                  ),
+          ),
+        );
+      },
     );
   }
 
@@ -276,19 +224,27 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (h > 0) return '${h}h ${m}m';
     return '${m}m';
   }
+}
 
-  Widget _gameLeading(GameModel game) {
-    final meta = _metaMap[game.id];
+class _GameLeading extends StatelessWidget {
+  final GameModel game;
+  const _GameLeading({required this.game});
+
+  @override
+  Widget build(BuildContext context) {
+    final libraryState = context.watch<LibraryCubit>().state;
+    final meta = libraryState.metadata[game.id];
     final thumbUrl = meta?.gridUrl ?? meta?.coverUrl;
 
-    if (thumbUrl != null) {
+    if (game.id != null && thumbUrl != null) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(4),
-        child: Image.network(
-          thumbUrl,
+        child: CachedGameImage(
+          gameKey: game.slug.isNotEmpty ? game.slug : game.id.toString(),
+          imageUrl: thumbUrl,
+          type: meta?.gridUrl != null ? 'grid' : 'cover',
           width: 48,
           height: 48,
-          fit: BoxFit.cover,
           errorBuilder: (_, _, _) => _serviceIcon(game.service),
         ),
       );
@@ -297,9 +253,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
     return _serviceIcon(game.service);
   }
 
-  Widget _serviceIcon(Service service, {bool playing = false}) {
+  Widget _serviceIcon(Service service) {
     return CircleAvatar(
-      backgroundColor: playing ? Colors.green : null,
       child: switch (service) {
         Service.steam => const Text('S'),
         Service.lutris => const Text('L'),

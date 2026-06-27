@@ -20,15 +20,19 @@ class LutrisImportResult {
 }
 
 class LutrisImportService {
+  final DatabaseService _db;
+  final MetadataService _metadata;
   static const _lutrisDbPath = '.local/share/lutris/pga.db';
 
-  static String _getLutrisDbPath() {
+  LutrisImportService({required this._db, required this._metadata});
+
+  String _getLutrisDbPath() {
     final home =
         Platform.environment['HOME'] ?? '/home/${Platform.environment['USER']}';
     return p.join(home, _lutrisDbPath);
   }
 
-  static Future<LutrisImportResult> import({bool onlyInstalled = true}) async {
+  Future<LutrisImportResult> import({bool onlyInstalled = true}) async {
     final lutrisPath = _getLutrisDbPath();
     Database? lutrisDb;
     try {
@@ -47,7 +51,6 @@ class LutrisImportService {
     try {
       final where = onlyInstalled ? 'WHERE installed = 1' : '';
       final rows = await lutrisDb.rawQuery('SELECT * FROM games $where');
-      final db = DatabaseService.instance;
 
       int imported = 0;
       int updated = 0;
@@ -65,13 +68,13 @@ class LutrisImportService {
               )
             : null;
 
-        final existing = await db.getGameByService(
+        final existing = await _db.getGameByService(
           'lutris',
           lutrisId.toString(),
         );
 
         if (existing != null) {
-          await db.updateGame(
+          await _db.updateGame(
             existing.copyWith(
               name: row['name'] as String,
               slug: (row['slug'] as String?) ?? '',
@@ -84,7 +87,7 @@ class LutrisImportService {
           continue;
         }
 
-        final newId = await db.insertGame(
+        final newId = await _db.insertGame(
           GameModel(
             appId: lutrisId.toString(),
             name: row['name'] as String,
@@ -100,9 +103,11 @@ class LutrisImportService {
         );
         imported++;
         try {
-          await MetadataService.fetchAndCache(
+          final slug = (row['slug'] as String?) ?? '';
+          await _metadata.fetchAndCache(
             newId,
             row['name'] as String,
+            slug: slug,
           );
         } catch (_) {
           // metadata is best-effort
