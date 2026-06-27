@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/database/database_service.dart';
 import '../models/game_model.dart';
+import '../services/metadata_service.dart';
 import '../services/runner_discovery_service.dart';
 
 class AddGameScreen extends StatefulWidget {
@@ -64,7 +65,12 @@ class _AddGameScreenState extends State<AddGameScreen> {
       installed: true,
     );
 
-    await DatabaseService.instance.insertGame(game);
+    final newId = await DatabaseService.instance.insertGame(game);
+    try {
+      await MetadataService.fetchAndCache(newId, name);
+    } catch (_) {
+      // metadata is best-effort
+    }
     if (mounted) Navigator.pop(context);
   }
 

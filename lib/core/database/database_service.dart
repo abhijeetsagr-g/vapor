@@ -29,7 +29,7 @@ class DatabaseService {
     final path = p.join(dir.path, 'vapor.db');
     return openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE games (
@@ -54,6 +54,9 @@ class DatabaseService {
         }
         if (old < 3) {
           await _createMetadataTable(db);
+        }
+        if (old < 4) {
+          await _migrateMetadataV4(db);
         }
       },
     );
@@ -118,9 +121,26 @@ class DatabaseService {
         esrbRating TEXT,
         metacritic REAL,
         website TEXT,
+        gridUrl TEXT,
+        heroUrl TEXT,
+        logoUrl TEXT,
+        iconUrl TEXT,
+        screenshots TEXT NOT NULL DEFAULT '[]',
+        movieUrl TEXT,
         FOREIGN KEY (gameId) REFERENCES games(id) ON DELETE CASCADE
       )
     ''');
+  }
+
+  Future<void> _migrateMetadataV4(Database db) async {
+    await db.execute('ALTER TABLE game_metadata ADD COLUMN gridUrl TEXT');
+    await db.execute('ALTER TABLE game_metadata ADD COLUMN heroUrl TEXT');
+    await db.execute('ALTER TABLE game_metadata ADD COLUMN logoUrl TEXT');
+    await db.execute('ALTER TABLE game_metadata ADD COLUMN iconUrl TEXT');
+    await db.execute(
+      'ALTER TABLE game_metadata ADD COLUMN screenshots TEXT NOT NULL DEFAULT "[]"',
+    );
+    await db.execute('ALTER TABLE game_metadata ADD COLUMN movieUrl TEXT');
   }
 
   Future<void> upsertMetadata(GameMetadata meta) async {
@@ -160,6 +180,12 @@ class DatabaseService {
         'esrbRating': meta.esrbRating,
         'metacritic': meta.metacritic,
         'website': meta.website,
+        'gridUrl': meta.gridUrl,
+        'heroUrl': meta.heroUrl,
+        'logoUrl': meta.logoUrl,
+        'iconUrl': meta.iconUrl,
+        'screenshots': jsonEncode(meta.screenshots),
+        'movieUrl': meta.movieUrl,
       };
 
   GameMetadata _metaFromMap(Map<String, dynamic> map) => GameMetadata(
@@ -177,6 +203,14 @@ class DatabaseService {
         esrbRating: map['esrbRating'] as String?,
         metacritic: (map['metacritic'] as num?)?.toDouble(),
         website: map['website'] as String?,
+        gridUrl: map['gridUrl'] as String?,
+        heroUrl: map['heroUrl'] as String?,
+        logoUrl: map['logoUrl'] as String?,
+        iconUrl: map['iconUrl'] as String?,
+        screenshots:
+            (jsonDecode(map['screenshots'] as String) as List<dynamic>)
+                .cast<String>(),
+        movieUrl: map['movieUrl'] as String?,
       );
 
   Map<String, dynamic> _toMap(GameModel game) => {

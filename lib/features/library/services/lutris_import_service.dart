@@ -5,6 +5,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:vapor/core/database/database_service.dart';
 import 'package:vapor/features/library/models/game_model.dart';
 
+import 'metadata_service.dart';
+
 class LutrisImportResult {
   final int imported;
   final int updated;
@@ -82,7 +84,7 @@ class LutrisImportService {
           continue;
         }
 
-        await db.insertGame(
+        final newId = await db.insertGame(
           GameModel(
             appId: lutrisId.toString(),
             name: row['name'] as String,
@@ -97,6 +99,14 @@ class LutrisImportService {
           ),
         );
         imported++;
+        try {
+          await MetadataService.fetchAndCache(
+            newId,
+            row['name'] as String,
+          );
+        } catch (_) {
+          // metadata is best-effort
+        }
       }
 
       return LutrisImportResult(imported: imported, updated: updated);

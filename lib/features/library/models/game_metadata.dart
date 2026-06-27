@@ -11,6 +11,12 @@ class GameMetadata {
   final String? esrbRating;
   final double? metacritic;
   final String? website;
+  final String? gridUrl;
+  final String? heroUrl;
+  final String? logoUrl;
+  final String? iconUrl;
+  final List<String> screenshots;
+  final String? movieUrl;
 
   GameMetadata({
     this.id,
@@ -25,6 +31,12 @@ class GameMetadata {
     this.esrbRating,
     this.metacritic,
     this.website,
+    this.gridUrl,
+    this.heroUrl,
+    this.logoUrl,
+    this.iconUrl,
+    this.screenshots = const [],
+    this.movieUrl,
   });
 
   GameMetadata copyWith({
@@ -40,6 +52,12 @@ class GameMetadata {
     String? esrbRating,
     double? metacritic,
     String? website,
+    String? gridUrl,
+    String? heroUrl,
+    String? logoUrl,
+    String? iconUrl,
+    List<String>? screenshots,
+    String? movieUrl,
   }) =>
       GameMetadata(
         id: id ?? this.id,
@@ -54,5 +72,11 @@ class GameMetadata {
         esrbRating: esrbRating ?? this.esrbRating,
         metacritic: metacritic ?? this.metacritic,
         website: website ?? this.website,
+        gridUrl: gridUrl ?? this.gridUrl,
+        heroUrl: heroUrl ?? this.heroUrl,
+        logoUrl: logoUrl ?? this.logoUrl,
+        iconUrl: iconUrl ?? this.iconUrl,
+        screenshots: screenshots ?? this.screenshots,
+        movieUrl: movieUrl ?? this.movieUrl,
       );
 }

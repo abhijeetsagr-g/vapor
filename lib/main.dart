@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'core/config.dart';
 import 'features/library/presentation/library_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Config.load();
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
   runApp(const VaporApp());
